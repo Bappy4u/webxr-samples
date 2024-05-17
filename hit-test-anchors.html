@@ -41,6 +41,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
         </p>
       </details>
     </header>
+    <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@v0.164.1/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@v0.164.1/examples/jsm/"
+    }
+  }
+</script>
     <script type="module">
       import {WebXRButton} from './js/util/webxr-button.js';
       import {Scene} from './js/render/scenes/scene.js';
@@ -49,6 +57,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
       import {Gltf2Node} from './js/render/nodes/gltf2.js';
       import {DropShadowNode} from './js/render/nodes/drop-shadow.js';
       import {vec3} from './js/render/math/gl-matrix.js';
+      import * as THREE from 'three';
       import {Ray} from './js/render/math/ray.js';
 
       // XR globals.
@@ -203,11 +212,30 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
         if (xrHitTestSource && pose) {
           let hitTestResults = frame.getHitTestResults(xrHitTestSource);
           if (hitTestResults.length > 0) {
+
             let pose = hitTestResults[0].getPose(xrRefSpace);
-            reticle.visible = true;
-            reticle.matrix = pose.transform.matrix;
-            reticleHitTestResult = hitTestResults[0];
+
+            const transformedOffsetRay = transformRay(pose.transform, new XRRay({x: 0, y: 0, z: 0}, {
+              x: 0,
+              y: 0,
+              z: -1
+            }));
+
+            // Perform hit testing with the transformed offset ray
+            const newHitTestResults = frame.getHitTestResultsForTransientInput(transformedOffsetRay, xrHitTestSource);
+
+            if (newHitTestResults.length > 0) {
+              const pose2 = newHitTestResults[0].getPose(xrRefSpace);
+              reticle.visible = true;
+              reticle.matrix.fromArray(pose2.transform.matrix);
+              reticleHitTestResult = newHitTestResults[0];
+            } else {
+              reticle.visible = false;
+            }
+          } else {
+            reticle.visible = false;
           }
+
         }
 
         for (const {anchoredObject, anchor} of anchoredObjects) {
@@ -228,6 +256,37 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
         scene.endFrame();
       }
+
+      function transformRay(viewerTransform, offsetRay) {
+        const origin = new Float32Array(3);
+        const direction = new Float32Array(3);
+
+        // Transform the origin of the offset ray
+        // Viewer transform contains position (in viewerTransform.position)
+        const viewerPosition = viewerTransform.position;
+        origin[0] = offsetRay.origin.x + viewerPosition.x;
+        origin[1] = offsetRay.origin.y + viewerPosition.y;
+        origin[2] = offsetRay.origin.z + viewerPosition.z;
+
+        // Transform the direction of the offset ray
+        // Viewer transform contains orientation (in viewerTransform.orientation as a quaternion)
+        const viewerOrientation = viewerTransform.orientation;
+        const quaternion = new THREE.Quaternion(viewerOrientation.x, viewerOrientation.y, viewerOrientation.z, viewerOrientation.w);
+
+        const offsetDirection = new THREE.Vector3(offsetRay.direction.x, offsetRay.direction.y, offsetRay.direction.z);
+        const transformedDirection = offsetDirection.applyQuaternion(quaternion);
+
+        // Normalize the transformed direction vector
+        transformedDirection.normalize();
+
+        // Copy transformed direction back to array
+        direction[0] = transformedDirection.x;
+        direction[1] = transformedDirection.y;
+        direction[2] = transformedDirection.z;
+
+        return new XRRay(origin, direction);
+      }
+
 
       // Start the XR application.
       initXR();
