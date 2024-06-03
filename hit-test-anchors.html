@@ -133,9 +133,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
         // position and render a reticle where it intersects with a real world
         // surface. To do this we first get the viewer space, then create a
         // hitTestSource that tracks it.
+        setupHittest(session);
+      }
+
+      function setupHittest(session){
         session.requestReferenceSpace('viewer').then((refSpace) => {
           xrViewerSpace = refSpace;
-          session.requestHitTestSource({ space: xrViewerSpace }).then((hitTestSource) => {
+
+          session.requestHitTestSourceForTransientInput({ profile: 'generic-touchscreen' }).then((hitTestSource) => {
             xrHitTestSource = hitTestSource;
           });
         });
@@ -197,7 +202,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
         let pose = frame.getViewerPose(xrRefSpace);
 
         reticle.visible = false;
-
+        setupHittest();
         // If we have a hit test source, get its results for the frame
         // and use the pose to display a reticle in the scene.
         if (xrHitTestSource && pose) {
